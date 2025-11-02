@@ -6,13 +6,14 @@ import {
   ResponsiveContainer, Cell, PieChart, Pie, Legend
 } from 'recharts';
 
-// --- 1. Import the new Chatbot component ---
+// --- Import Chatbot and Login ---
 import { Chatbot } from './Chatbot';
+import Login from './Login';
 
 // --- CONFIGURATION ---
-const API_ENDPOINT = "https://1pnszjn9th.execute-api.us-east-1.amazonaws.com"; // Paste your API endpoint
-// ---------------------
+const API_ENDPOINT = "https://1pnszjn9th.execute-api.us-east-1.amazonaws.com";
 
+// ---------------- DASHBOARD COMPONENT ----------------
 const DashboardCharts = ({ documents }) => {
   if (documents.length === 0) {
     return (
@@ -27,11 +28,8 @@ const DashboardCharts = ({ documents }) => {
     const category = doc.data?.category || 'Other';
     const amount = parseFloat(doc.data?.totalAmount) || 0;
     
-    if (!acc[category]) {
-      acc[category] = 0;
-    }
+    if (!acc[category]) acc[category] = 0;
     acc[category] += amount;
-    
     return acc;
   }, {});
 
@@ -44,7 +42,7 @@ const DashboardCharts = ({ documents }) => {
 
   return (
     <div className="max-w-4xl mx-auto mb-10 flex flex-col md:flex-row gap-8">
-      
+      {/* Bar Chart */}
       <div className="w-full md:w-1/2 bg-gray-800 p-6 rounded-lg shadow-lg">
         <h2 className="text-xl font-semibold mb-4 text-center">Spending by Category</h2>
         <div style={{ width: '100%', height: 300 }}>
@@ -53,10 +51,7 @@ const DashboardCharts = ({ documents }) => {
               <CartesianGrid strokeDasharray="3 3" stroke="#555" />
               <XAxis dataKey="name" />
               <YAxis />
-              <Tooltip 
-                formatter={(value) => `₹${value.toFixed(2)}`} 
-                cursor={{fill: 'rgba(255,255,255,0.1)'}}
-              />
+              <Tooltip formatter={(value) => `₹${value.toFixed(2)}`} cursor={{fill: 'rgba(255,255,255,0.1)'}} />
               <Bar dataKey="value">
                 {chartData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -67,6 +62,7 @@ const DashboardCharts = ({ documents }) => {
         </div>
       </div>
       
+      {/* Pie Chart */}
       <div className="w-full md:w-1/2 bg-gray-800 p-6 rounded-lg shadow-lg">
         <h2 className="text-xl font-semibold mb-4 text-center">Category Breakdown</h2>
         <div style={{ width: '100%', height: 300 }}>
@@ -92,27 +88,27 @@ const DashboardCharts = ({ documents }) => {
           </ResponsiveContainer>
         </div>
       </div>
-      
     </div>
   );
 };
 
+// ---------------- MAIN APP ----------------
 function App() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [documents, setDocuments] = useState([]);
   const [statusMessage, setStatusMessage] = useState('Welcome!');
   const [isLoading, setIsLoading] = useState(false);
 
+  // NEW: Login state
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  // Fetch documents
   const fetchDocuments = async () => {
     try {
       setIsLoading(true);
       setStatusMessage('Fetching documents...');
       const response = await axios.get(`${API_ENDPOINT}/documents`);
-      
-      const sortedDocs = response.data.sort((a, b) => 
-        new Date(b.processedAt) - new Date(a.processedAt)
-      );
-      
+      const sortedDocs = response.data.sort((a, b) => new Date(b.processedAt) - new Date(a.processedAt));
       setDocuments(sortedDocs);
       setStatusMessage('Documents loaded.');
     } catch (error) {
@@ -128,7 +124,6 @@ function App() {
     const interval = setInterval(async () => {
       attempts++;
       await fetchDocuments();
-      
       if (attempts >= 7) {
         clearInterval(interval);
         setStatusMessage('Processing complete.');
@@ -142,7 +137,6 @@ function App() {
       setStatusMessage('Please select a file first.');
       return;
     }
-    
     setIsLoading(true);
     setStatusMessage('1/3: Getting upload URL...');
 
@@ -152,17 +146,13 @@ function App() {
         { fileName: selectedFile.name },
         { headers: { 'Content-Type': 'application/json' } }
       );
-
       const { uploadUrl } = uploadUrlResponse.data;
       setStatusMessage('2/3: Uploading file to S3...');
-
       await axios.put(uploadUrl, selectedFile, {
         headers: { 'Content-Type': selectedFile.type },
       });
-
       setStatusMessage('3/3: File uploaded! Pipeline is processing...');
       pollForResults();
-
     } catch (error) {
       console.error("Upload failed:", error);
       setStatusMessage('Upload failed. See console for details.');
@@ -177,6 +167,12 @@ function App() {
     fetchDocuments();
   }, []);
 
+  // --- LOGIN SCREEN ---
+  if (!isLoggedIn) {
+    return <Login onLogin={() => setIsLoggedIn(true)} />;
+  }
+
+  // --- MAIN DASHBOARD AFTER LOGIN ---
   return (
     <div className="bg-gray-900 min-h-screen text-white p-8">
       <header className="max-w-4xl mx-auto mb-10">
@@ -208,10 +204,10 @@ function App() {
         <p className="text-center text-sm text-gray-400 mt-4">{statusMessage}</p>
       </div>
 
-      {/* --- 3. Render the new Chatbot component --- */}
+      {/* Chatbot */}
       <Chatbot />
 
-      {/* --- 4. Render the Dashboard component --- */}
+      {/* Dashboard */}
       <DashboardCharts documents={documents} />
 
       {/* Results Table */}
@@ -230,11 +226,11 @@ function App() {
           <table className="min-w-full divide-y divide-gray-700">
             <thead className="bg-gray-700">
               <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">File Name</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Category</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Vendor</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Date</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Total Amount</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">File Name</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Category</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Vendor</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Date</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Total Amount</th>
               </tr>
             </thead>
             <tbody className="bg-gray-800 divide-y divide-gray-700">
@@ -257,7 +253,6 @@ function App() {
           </table>
         </div>
       </div>
-      
     </div>
   );
 }
